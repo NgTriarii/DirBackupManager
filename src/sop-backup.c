@@ -123,13 +123,43 @@ void register_backup(pid_t pid, const char* src, const char* dst)
     }
     active_backups[backup_count].pid = pid;
 
-    char abs_src[PATH_MAX];
-    char abs_dst[PATH_MAX];
+    char temp_path[PATH_MAX];
 
-    if (realpath(src, abs_src) != NULL)
-        strncpy(abs_src, src, PATH_MAX);
-    if (realpath(dst, abs_dst) != NULL)
-        strncpy(abs_dst, dst, PATH_MAX);
+    if (realpath(src, temp_path) != NULL)
+    {
+        strncpy(active_backups[backup_count].src, temp_path, PATH_MAX);
+    }
+    else
+    {
+        if (src[0] != '/' && getcwd(temp_path, sizeof(temp_path)))
+        {
+            size_t len = strlen(temp_path);
+            snprintf(temp_path + len, PATH_MAX - len, "/%s", src);
+            strncpy(active_backups[backup_count].src, temp_path, PATH_MAX);
+        }
+        else
+        {
+            strncpy(active_backups[backup_count].src, src, PATH_MAX);
+        }
+    }
+
+    if (realpath(dst, temp_path) != NULL)
+    {
+        strncpy(active_backups[backup_count].dst, temp_path, PATH_MAX);
+    }
+    else
+    {
+        if (dst[0] != '/' && getcwd(temp_path, sizeof(temp_path)))
+        {
+            size_t len = strlen(temp_path);
+            snprintf(temp_path + len, PATH_MAX - len, "/%s", dst);
+            strncpy(active_backups[backup_count].dst, temp_path, PATH_MAX);
+        }
+        else
+        {
+            strncpy(active_backups[backup_count].dst, dst, PATH_MAX);
+        }
+    }
 
     backup_count++;
 }
@@ -151,6 +181,20 @@ int add_command(char** comm_args, int arg_num)
     {
         perror("Error accessing source");
         return 0;
+    }
+
+    char abs_src[PATH_MAX];
+    if (!realpath(comm_args[1], abs_src))
+    {
+        if (comm_args[1][0] != '/' && getcwd(abs_src, sizeof(abs_src)))
+        {
+            size_t len = strlen(abs_src);
+            snprintf(abs_src + len, PATH_MAX - len, "/%s", comm_args[1]);
+        }
+        else
+        {
+            strncpy(abs_src, comm_args[1], PATH_MAX);
+        }
     }
 
     for (int i = 2; i < arg_num; i++)
@@ -182,7 +226,7 @@ int add_command(char** comm_args, int arg_num)
             }
         }
 
-        if (backup_exists(comm_args[1], comm_args[i]))
+        if (backup_exists(abs_src, abs_dst))
         {
             fprintf(stderr, "Error: Backup from '%s' to '%s' is already active.\n", comm_args[1], comm_args[i]);
             continue;
@@ -207,7 +251,7 @@ int add_command(char** comm_args, int arg_num)
         }
         else
         {
-            register_backup(pid, comm_args[1], comm_args[i]);
+            register_backup(pid, abs_src, abs_dst);
             printf("[%d] Started backup process [%d] for %s\n", getpid(), pid, comm_args[i]);
         }
     }
